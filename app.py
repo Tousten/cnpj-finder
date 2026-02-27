@@ -624,7 +624,58 @@ def search_companies():
                         "type": "api"
                     })
                 sources_used.append("brasilapi")
-    except:
+    except Exception as e:
+        print(f"BrasilAPI error: {e}")
+        pass
+    
+    # Source 2: ReceitaWS - alternative name search API
+    try:
+        url = f"https://www.receitaws.com.br/v1/cnpj/search?q={requests.utils.quote(query)}"
+        headers = {'Accept': 'application/json'}
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("data") and isinstance(data["data"], list):
+                for item in data["data"][:5]:
+                    # Skip if already in results
+                    cnpj_clean = item.get("cnpj", "").replace(".", "").replace("/", "").replace("-", "")
+                    if not any(r.get("cnpj") == cnpj_clean for r in results):
+                        results.append({
+                            "cnpj": cnpj_clean,
+                            "razao_social": item.get("nome", ""),
+                            "nome_fantasia": item.get("fantasia", ""),
+                            "municipio": item.get("municipio", ""),
+                            "uf": item.get("uf", ""),
+                            "source": "ReceitaWS",
+                            "type": "api"
+                        })
+                if "receitaws" not in sources_used:
+                    sources_used.append("receitaws")
+    except Exception as e:
+        print(f"ReceitaWS error: {e}")
+        pass
+    
+    # Source 3: CNPJ.io - another search API
+    try:
+        url = f"https://api.cnpj.io/v1/companies?q={requests.utils.quote(query)}"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, list):
+                for item in data[:3]:
+                    cnpj_clean = str(item.get("cnpj", "")).replace(".", "").replace("/", "").replace("-", "")
+                    if cnpj_clean and not any(r.get("cnpj") == cnpj_clean for r in results):
+                        results.append({
+                            "cnpj": cnpj_clean,
+                            "razao_social": item.get("razao_social", ""),
+                            "nome_fantasia": item.get("nome_fantasia", ""),
+                            "source": "CNPJ.io",
+                            "type": "api"
+                        })
+                if "cnpj_io" not in sources_used:
+                    sources_used.append("cnpj_io")
+    except Exception as e:
+        print(f"CNPJ.io error: {e}")
         pass
     
     # Source 2: Try to get details for found CNPJs from other sources
@@ -644,49 +695,63 @@ def search_companies():
                 pass
         enriched_results.append(company)
     
-    # Source 3: Web Scraping - Google Search
+    # Source 4: Web Scraping - Google Search (improved)
     try:
-        # Scrape Google Search for company info
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
         }
-        search_url = f"https://www.google.com/search?q={requests.utils.quote(query + ' empresa CNPJ Brazil')}"
-        response = requests.get(search_url, headers=headers, timeout=10)
+        search_query = f"{query} empresa CNPJ site:linkedin.com OR site:facebook.com OR site:instagram.com"
+        search_url = f"https://www.google.com/search?q={requests.utils.quote(search_query)}&num=10"
+        response = requests.get(search_url, headers=headers, timeout=15)
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Extract company info from search results
-            # Look for CNPJ patterns in results
+            # Try multiple selectors for search results
+            result_selectors = [
+                'div.g',  # Classic Google result
+                'div[data-ved]',  # Newer Google layout
+                '.yuRUbf',  # Another Google class
+                'h3',  # Just get all headings
+            ]
+            
+            found_results = []
+            for selector in result_selectors:
+                found_results = soup.select(selector)
+                if found_results:
+                    break
+            
+            # Extract CNPJ pattern
             cnpj_pattern = r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}'
-            found_cnpjs = re.findall(cnpj_pattern, response.text)
+            page_text = soup.get_text()
+            found_cnpjs = re.findall(cnpj_pattern, page_text)
             
-            # Look for company names in search results
-            results_divs = soup.find_all('div', class_='g')
-            for div in results_divs[:3]:
-                title_elem = div.find('h3')
-                if title_elem:
-                    title = title_elem.get_text()
-                    # Skip if already in results
-                    if not any(r.get('nome_fantasia') == title or r.get('razao_social') == title for r in enriched_results):
-                        snippet_elem = div.find('div', {'data-sncf': '1'})
-                        snippet = snippet_elem.get_text() if snippet_elem else ''
-                        
-                        # Extract CNPJ from snippet if present
-                        cnpj_in_snippet = re.findall(cnpj_pattern, snippet)
-                        cnpj = cnpj_in_snippet[0].replace('.', '').replace('/', '').replace('-', '') if cnpj_in_snippet else ''
-                        
-                        enriched_results.append({
-                            "nome_fantasia": title,
-                            "razao_social": title,
-                            "cnpj": cnpj,
-                            "snippet": snippet[:200] + '...' if len(snippet) > 200 else snippet,
-                            "source": "Google Search",
-                            "type": "scraping"
-                        })
+            # Process results
+            for elem in found_results[:5]:
+                title = elem.get_text().strip() if elem else ''
+                
+                # Clean up title (remove common suffixes)
+                title = re.sub(r'\s*[-|]\s*(LinkedIn|Facebook|Instagram|Google).*$', '', title, flags=re.IGNORECASE)
+                
+                if len(title) > 5 and not any(r.get('nome_fantasia') == title or r.get('razao_social') == title for r in enriched_results):
+                    # Try to find CNPJ near this result
+                    cnpj = ''
+                    if found_cnpjs:
+                        cnpj = found_cnpjs.pop(0).replace('.', '').replace('/', '').replace('-', '')
+                    
+                    enriched_results.append({
+                        "nome_fantasia": title[:100],
+                        "razao_social": title[:100],
+                        "cnpj": cnpj,
+                        "source": "Google Search",
+                        "type": "scraping"
+                    })
             
-            if found_cnpjs or results_divs:
-                sources_used.append("google_scraping")
+            if enriched_results and len([r for r in enriched_results if r.get('source') == 'Google Search']) > 0:
+                if "google_scraping" not in sources_used:
+                    sources_used.append("google_scraping")
     except Exception as e:
         print(f"Scraping error: {e}")
         pass
