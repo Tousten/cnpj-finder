@@ -465,78 +465,190 @@ def search_companies():
         except:
             pass
     
-    # Google scraping as fallback
+    # Google scraping as fallback - IMPROVED
     if len(results) == 0:
         try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            url = f"https://www.google.com/search?q={requests.utils.quote(query + ' empresa CNPJ')}"
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                cnpj_pattern = r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}'
-                found_cnpjs = re.findall(cnpj_pattern, response.text)
-                for cnpj in found_cnpjs[:3]:
-                    cnpj_clean = cnpj.replace('.', '').replace('/', '').replace('-', '')
-                    if not any(r.get("cnpj") == cnpj_clean for r in results):
-                        results.append({
-                            "nome_fantasia": f"Empresa encontrada",
-                            "razao_social": query,
-                            "cnpj": cnpj_clean,
-                            "source": "Google Search"
-                        })
-                if found_cnpjs and "google" not in sources_used:
-                    sources_used.append("google")
-        except:
-            pass
-    
-    # Yahoo search scraping as another fallback
-    if len(results) == 0:
-        try:
+            # More realistic browser headers
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
                 'Accept-Encoding': 'gzip, deflate, br',
+                'Referer': 'https://www.google.com/',
                 'DNT': '1',
                 'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'same-origin',
+                'Cache-Control': 'max-age=0',
             }
-            # Yahoo search URL
-            yahoo_url = f"https://search.yahoo.com/search?p={requests.utils.quote(query + ' empresa CNPJ Brazil')}"
-            response = requests.get(yahoo_url, headers=headers, timeout=15)
             
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # Look for CNPJ patterns
-                cnpj_pattern = r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}'
-                found_cnpjs = re.findall(cnpj_pattern, response.text)
-                
-                # Also look for company names in results
-                # Yahoo uses different selectors
-                yahoo_results = soup.find_all('div', class_='algo') or soup.find_all('li', class_='ov-a') or soup.find_all('h3')
-                
-                for elem in yahoo_results[:5]:
-                    title = elem.get_text().strip() if elem else ''
-                    # Clean up title
-                    title = re.sub(r'\s*[-|]\s*(Yahoo|Search|Results).*$', '', title, flags=re.IGNORECASE)
+            # Try different search queries
+            search_queries = [
+                query + ' CNPJ',
+                query + ' empresa',
+                query,
+                '"' + query + '"'
+            ]
+            
+            for search_query in search_queries:
+                if len(results) > 0:
+                    break
                     
-                    if len(title) > 5 and not any(r.get('nome_fantasia') == title or r.get('razao_social') == title for r in results):
-                        # Try to find a CNPJ for this result
-                        cnpj = ''
-                        if found_cnpjs:
-                            cnpj = found_cnpjs.pop(0).replace('.', '').replace('/', '').replace('-', '')
-                        
-                        results.append({
-                            "nome_fantasia": title[:100],
-                            "razao_social": title[:100],
-                            "cnpj": cnpj,
-                            "source": "Yahoo Search",
-                            "type": "scraping"
-                        })
+                url = f"https://www.google.com/search?q={requests.utils.quote(search_query)}&hl=pt-BR"
+                session = requests.Session()
+                response = session.get(url, headers=headers, timeout=15, allow_redirects=True)
                 
-                if results and any(r.get('source') == 'Yahoo Search' for r in results):
-                    if "yahoo" not in sources_used:
-                        sources_used.append("yahoo")
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    # Look for CNPJ in entire page
+                    cnpj_pattern = r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}'
+                    found_cnpjs = re.findall(cnpj_pattern, response.text)
+                    
+                    # Multiple ways to find company names
+                    # Method 1: Look for h3 tags (common in Google results)
+                    for h3 in soup.find_all('h3'):
+                        text = h3.get_text().strip()
+                        # Filter out generic titles
+                        if len(text) > 5 and len(text) < 100 and not any(x in text.lower() for x in ['google', 'pesquisa', 'search', 'resultados']):
+                            if not any(r.get('nome_fantasia') == text or r.get('razao_social') == text for r in results):
+                                cnpj = found_cnpjs.pop(0) if found_cnpjs else ''
+                                cnpj_clean = cnpj.replace('.', '').replace('/', '').replace('-', '') if cnpj else ''
+                                results.append({
+                                    "nome_fantasia": text,
+                                    "razao_social": text,
+                                    "cnpj": cnpj_clean,
+                                    "source": "Google Search",
+                                    "type": "scraping"
+                                })
+                    
+                    # Method 2: Look for divs with specific classes
+                    if len(results) == 0:
+                        for div in soup.find_all(['div', 'span']):
+                            text = div.get_text().strip()
+                            # Check if it looks like a company name
+                            if query.lower() in text.lower() and len(text) > 10 and len(text) < 150:
+                                if not any(r.get('nome_fantasia') == text or r.get('razao_social') == text for r in results):
+                                    cnpj = found_cnpjs.pop(0) if found_cnpjs else ''
+                                    cnpj_clean = cnpj.replace('.', '').replace('/', '').replace('-', '') if cnpj else ''
+                                    results.append({
+                                        "nome_fantasia": text[:100],
+                                        "razao_social": text[:100],
+                                        "cnpj": cnpj_clean,
+                                        "source": "Google Search",
+                                        "type": "scraping"
+                                    })
+                                    break
+                    
+                    if results and "google" not in sources_used:
+                        sources_used.append("google")
+                        break
+                        
+        except Exception as e:
+            print(f"Google scraping error: {e}")
+            pass
+    
+    # Yahoo search scraping as another fallback - IMPROVED
+    if len(results) == 0:
+        try:
+            # Better headers to mimic real browser
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Referer': 'https://search.yahoo.com/',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+            
+            # Try different Yahoo search queries
+            yahoo_queries = [
+                query + ' CNPJ',
+                query + ' empresa Brazil',
+                query
+            ]
+            
+            for yahoo_query in yahoo_queries:
+                if len(results) > 0:
+                    break
+                    
+                yahoo_url = f"https://search.yahoo.com/search?p={requests.utils.quote(yahoo_query)}"
+                session = requests.Session()
+                response = session.get(yahoo_url, headers=headers, timeout=15)
+                
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    # Look for CNPJ patterns
+                    cnpj_pattern = r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}'
+                    found_cnpjs = re.findall(cnpj_pattern, response.text)
+                    
+                    # Multiple parsing strategies for Yahoo
+                    # Strategy 1: Look for h3 tags
+                    for h3 in soup.find_all('h3'):
+                        text = h3.get_text().strip()
+                        if len(text) > 5 and len(text) < 100:
+                            if query.lower() in text.lower() or any(word in text.lower() for word in query.lower().split()):
+                                if not any(r.get('nome_fantasia') == text or r.get('razao_social') == text for r in results):
+                                    cnpj = found_cnpjs.pop(0) if found_cnpjs else ''
+                                    cnpj_clean = cnpj.replace('.', '').replace('/', '').replace('-', '') if cnpj else ''
+                                    results.append({
+                                        "nome_fantasia": text,
+                                        "razao_social": text,
+                                        "cnpj": cnpj_clean,
+                                        "source": "Yahoo Search",
+                                        "type": "scraping"
+                                    })
+                    
+                    # Strategy 2: Look for specific Yahoo result classes
+                    if len(results) == 0:
+                        yahoo_classes = ['algo', 'ov-a', 'searchCenterMiddle', 'title', 'd-ib', 'ls0']
+                        for class_name in yahoo_classes:
+                            elements = soup.find_all(['div', 'li', 'h3', 'a'], class_=class_name)
+                            for elem in elements[:3]:
+                                text = elem.get_text().strip()
+                                if len(text) > 5 and len(text) < 150:
+                                    if query.lower() in text.lower():
+                                        if not any(r.get('nome_fantasia') == text or r.get('razao_social') == text for r in results):
+                                            cnpj = found_cnpjs.pop(0) if found_cnpjs else ''
+                                            cnpj_clean = cnpj.replace('.', '').replace('/', '').replace('-', '') if cnpj else ''
+                                            results.append({
+                                                "nome_fantasia": text[:100],
+                                                "razao_social": text[:100],
+                                                "cnpj": cnpj_clean,
+                                                "source": "Yahoo Search",
+                                                "type": "scraping"
+                                            })
+                                            break
+                            if len(results) > 0:
+                                break
+                    
+                    # Strategy 3: Look for any text containing the query
+                    if len(results) == 0:
+                        for elem in soup.find_all(['div', 'span', 'a', 'h3']):
+                            text = elem.get_text().strip()
+                            if query.lower() in text.lower() and len(text) > 10 and len(text) < 200:
+                                if not any(r.get('nome_fantasia') == text or r.get('razao_social') == text for r in results):
+                                    cnpj = found_cnpjs.pop(0) if found_cnpjs else ''
+                                    cnpj_clean = cnpj.replace('.', '').replace('/', '').replace('-', '') if cnpj else ''
+                                    results.append({
+                                        "nome_fantasia": text[:100],
+                                        "razao_social": text[:100],
+                                        "cnpj": cnpj_clean,
+                                        "source": "Yahoo Search",
+                                        "type": "scraping"
+                                    })
+                                    break
+                    
+                    if results and any(r.get('source') == 'Yahoo Search' for r in results):
+                        if "yahoo" not in sources_used:
+                            sources_used.append("yahoo")
+                        break
+                        
         except Exception as e:
             print(f"Yahoo search error: {e}")
             pass
