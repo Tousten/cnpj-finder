@@ -46,6 +46,31 @@ HTML_TEMPLATE = """
         .header h1 { font-size: 2rem; margin-bottom: 10px; }
         .header p { opacity: 0.9; font-size: 1.1rem; }
         .content { padding: 40px; }
+        .search-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .search-tab {
+            flex: 1;
+            padding: 15px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .search-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .search-panel {
+            display: none;
+        }
+        .search-panel.active {
+            display: block;
+        }
         .search-box {
             display: flex;
             gap: 15px;
@@ -133,81 +158,6 @@ HTML_TEMPLATE = """
             border-radius: 12px;
             margin-top: 20px;
         }
-        .premium-banner {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 12px;
-            margin-top: 30px;
-            text-align: center;
-        }
-        .premium-banner h3 {
-            margin-bottom: 10px;
-        }
-        .premium-banner button {
-            background: white;
-            color: #f5576c;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 25px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-top: 15px;
-        }
-        .partners-section {
-            margin-top: 25px;
-        }
-        .partners-section h3 {
-            color: #333;
-            margin-bottom: 15px;
-        }
-        .partner-card {
-            background: white;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #e0e0e0;
-        }
-        .partner-name {
-            font-weight: 600;
-            color: #667eea;
-        }
-        .partner-qualification {
-            color: #666;
-            font-size: 0.9rem;
-            margin-top: 5px;
-        }
-        .cnpj-format {
-            font-family: monospace;
-            background: #e9ecef;
-            padding: 2px 8px;
-            border-radius: 4px;
-        }
-        .search-tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        .search-tab {
-            flex: 1;
-            padding: 15px;
-            background: #f0f0f0;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s;
-        }
-        .search-tab.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        .search-panel {
-            display: none;
-        }
-        .search-panel.active {
-            display: block;
-        }
         .source-badge {
             display: inline-block;
             padding: 3px 10px;
@@ -222,6 +172,12 @@ HTML_TEMPLATE = """
         .source-gp {
             background: #fff3e0;
             color: #ef6c00;
+        }
+        .cnpj-format {
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 2px 8px;
+            border-radius: 4px;
         }
     </style>
 </head>
@@ -252,12 +208,6 @@ HTML_TEMPLATE = """
             </div>
             
             <div id="result"></div>
-            
-            <div class="premium-banner">
-                <h3>⭐ Quer mais dados?</h3>
-                <p>Versão Premium: Busca ilimitada, contatos de sócios, emails, telefones e exportação CSV.</p>
-                <button>Ver Planos</button>
-            </div>
         </div>
     </div>
     
@@ -266,8 +216,6 @@ HTML_TEMPLATE = """
         document.getElementById('cnpjInput').addEventListener('input', function(e) {
             let value = e.target.value.replace(/\D/g, '');
             if (value.length > 14) value = value.slice(0, 14);
-            
-            // Format: XX.XXX.XXX/XXXX-XX
             if (value.length > 12) {
                 value = value.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
             } else if (value.length > 8) {
@@ -277,7 +225,6 @@ HTML_TEMPLATE = """
             } else if (value.length > 2) {
                 value = value.replace(/(\d{2})(\d+)/, '$1.$2');
             }
-            
             e.target.value = value;
         });
         
@@ -285,7 +232,6 @@ HTML_TEMPLATE = """
             const input = document.getElementById('cnpjInput');
             const btn = document.getElementById('searchBtn');
             const result = document.getElementById('result');
-            
             const cnpj = input.value.replace(/\D/g, '');
             
             if (cnpj.length !== 14) {
@@ -300,14 +246,13 @@ HTML_TEMPLATE = """
             try {
                 const response = await fetch('/api/cnpj/' + cnpj);
                 const data = await response.json();
-                
                 if (data.error) {
                     result.innerHTML = `<div class="error-message">❌ ${data.error}</div>`;
                 } else {
                     displayResult(data);
                 }
             } catch (error) {
-                result.innerHTML = `<div class="error-message">❌ Erro na busca. Tente novamente.</div>`;
+                result.innerHTML = `<div class="error-message">❌ Erro na busca</div>`;
             } finally {
                 btn.disabled = false;
                 btn.textContent = '🔍 Buscar';
@@ -317,139 +262,38 @@ HTML_TEMPLATE = """
         function displayResult(data) {
             const result = document.getElementById('result');
             
-            const statusClass = data.situacao === 'ATIVA' ? 'status-active' : 'status-inactive';
-            const statusText = data.situacao === 'ATIVA' ? 'Ativa' : 'Inativa';
-            
-            // Show data sources
-            const sourcesHTML = data.sources ? `
-                <div style="margin-bottom: 20px;">
-                    <span style="color: #666; font-size: 0.9rem;">Fontes: ${data.sources.map(s => {
-                        const names = {
-                            'receita_federal': 'Receita Federal',
-                            'minha_receita': 'Minha Receita',
-                            'cnpj_ws': 'CNPJ.ws'
-                        };
-                        return names[s] || s;
-                    }).join(', ')}</span>
-                    ${data.enriched ? '<span style="background: #d4edda; color: #155724; padding: 3px 10px; border-radius: 10px; font-size: 0.8rem; margin-left: 10px;">✓ Enriquecido</span>' : ''}
-                </div>
-            ` : '';
-            
             let partnersHTML = '';
             if (data.qsa && data.qsa.length > 0) {
-                partnersHTML = `
-                    <div class="partners-section">
-                        <h3>👥 Sócios</h3>
-                        ${data.qsa.map(partner => `
-                            <div class="partner-card">
-                                <div class="partner-name">${partner.nome_socio}</div>
-                                <div class="partner-qualification">${partner.qualificacao_socio || 'Sócio'}</div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
-            }
-            
-            // Additional contact info
-            let contactHTML = '';
-            if (data.email || data.telefone) {
-                contactHTML = `
-                    <div class="info-row">
-                        <div class="info-label">Contato</div>
-                        <div class="info-value">
-                            ${data.email ? `<div>📧 ${data.email}</div>` : ''}
-                            ${data.telefone ? `<div>📞 ${data.telefone}</div>` : ''}
-                        </div>
-                    </div>
-                `;
+                partnersHTML = `<div style="margin-top: 20px;"><h3>👥 Sócios</h3>` + 
+                    data.qsa.map(p => `<div style="padding: 10px; background: white; border-radius: 8px; margin-top: 10px;">
+                        <strong>${p.nome_socio}</strong><br><small>${p.qualificacao_socio || 'Sócio'}</small>
+                    </div>`).join('') + `</div>`;
             }
             
             result.innerHTML = `
                 <div class="result-card">
-                    ${sourcesHTML}
-                    
                     <h2>${data.nome_fantasia || data.razao_social}</h2>
-                    
-                    <div class="info-row">
-                        <div class="info-label">Razão Social</div>
-                        <div class="info-value">${data.razao_social}</div>
-                    </div>
-                    
-                    <div class="info-row">
-                        <div class="info-label">CNPJ</div>
-                        <div class="info-value"><span class="cnpj-format">${formatCNPJ(data.cnpj)}</span></div>
-                    </div>
-                    
-                    <div class="info-row">
-                        <div class="info-label">Status</div>
-                        <div class="info-value"><span class="status-badge ${statusClass}">${statusText}</span></div>
-                    </div>
-                    
-                    <div class="info-row">
-                        <div class="info-label">Data Abertura</div>
-                        <div class="info-value">${data.data_inicio_atividade || 'N/A'}</div>
-                    </div>
-                    
-                    <div class="info-row">
-                        <div class="info-label">Natureza</div>
-                        <div class="info-value">${data.natureza_juridica || 'N/A'}</div>
-                    </div>
-                    
-                    <div class="info-row">
-                        <div class="info-label">Atividade</div>
-                        <div class="info-value">${data.cnae_fiscal_descricao || 'N/A'}</div>
-                    </div>
-                    
-                    <div class="info-row">
-                        <div class="info-label">Endereço</div>
-                        <div class="info-value">
-                            ${data.logradouro || ''} ${data.numero || ''} ${data.complemento || ''}<br>
-                            ${data.bairro || ''} - ${data.municipio || ''}/${data.uf || ''}<br>
-                            CEP: ${data.cep || 'N/A'}
-                        </div>
-                    </div>
-                    
-                    ${contactHTML}
-                    
-                    <div class="info-row">
-                        <div class="info-label">Capital Social</div>
-                        <div class="info-value">${data.capital_social ? 'R$ ' + parseFloat(data.capital_social).toLocaleString('pt-BR', {minimumFractionDigits: 2}) : 'N/A'}</div>
-                    </div>
-                    
+                    <div class="info-row"><div class="info-label">CNPJ</div><div class="info-value"><span class="cnpj-format">${formatCNPJ(data.cnpj)}</span></div></div>
+                    <div class="info-row"><div class="info-label">Razão Social</div><div class="info-value">${data.razao_social}</div></div>
+                    <div class="info-row"><div class="info-label">Atividade</div><div class="info-value">${data.cnae_fiscal_descricao || 'N/A'}</div></div>
+                    <div class="info-row"><div class="info-label">Endereço</div><div class="info-value">${data.logradouro || ''} ${data.numero || ''}<br>${data.municipio || ''}/${data.uf || ''}</div></div>
                     ${partnersHTML}
                 </div>
             `;
         }
         
-        function formatCNPJ(cnpj) {
-            return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-        }
-        
-        // Enter key to search
-        document.getElementById('cnpjInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') searchCNPJ();
-        });
-        
-        document.getElementById('nameInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') searchByName();
-        });
-        
-        // Tab switching
         function switchTab(tab) {
             document.querySelectorAll('.search-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.search-panel').forEach(p => p.classList.remove('active'));
-            
             document.getElementById('tab-' + tab).classList.add('active');
             document.getElementById('panel-' + tab).classList.add('active');
             document.getElementById('result').innerHTML = '';
         }
         
-        // Search by name
         async function searchByName() {
             const input = document.getElementById('nameInput');
             const btn = document.getElementById('searchNameBtn');
             const result = document.getElementById('result');
-            
             const query = input.value.trim();
             
             if (query.length < 3) {
@@ -464,43 +308,32 @@ HTML_TEMPLATE = """
             try {
                 const response = await fetch('/api/search?q=' + encodeURIComponent(query));
                 const data = await response.json();
-                
                 if (data.error) {
                     result.innerHTML = `<div class="error-message">❌ ${data.error}</div>`;
                 } else {
                     displayNameResults(data);
                 }
             } catch (error) {
-                result.innerHTML = `<div class="error-message">❌ Erro na busca. Tente novamente.</div>`;
+                result.innerHTML = `<div class="error-message">❌ Erro na busca</div>`;
             } finally {
                 btn.disabled = false;
                 btn.textContent = '🔍 Buscar';
             }
         }
         
-        // Display name search results
         function displayNameResults(data) {
             const result = document.getElementById('result');
-            
             if (!data.results || data.results.length === 0) {
-                result.innerHTML = '<div class="error-message">❌ Nenhuma empresa encontrada</div>';
+                result.innerHTML = '<div class="error-message">❌ Nenhuma empresa encontrada. Tente buscar pelo CNPJ diretamente.</div>';
                 return;
             }
             
-            let html = `
-                <div style="margin-bottom: 15px; color: #666;">
-                    ${data.count} resultado(s) encontrado(s) 
-                    ${data.sources && data.sources.length > 0 ? '(Fontes: ' + data.sources.join(', ') + ')' : ''}
-                </div>
-            `;
+            let html = `<div style="margin-bottom: 15px; color: #666;">${data.count} resultado(s)</div>`;
             
             data.results.forEach(company => {
-                let sourceBadge;
-                if (company.source === 'Google Search') {
-                    sourceBadge = '<span class="source-badge source-gp">Google (Scraping)</span>';
-                } else {
-                    sourceBadge = '<span class="source-badge source-br">' + (company.source || 'BrasilAPI') + '</span>';
-                }
+                const sourceBadge = company.source === 'Google Search' 
+                    ? '<span class="source-badge source-gp">Google</span>'
+                    : '<span class="source-badge source-br">' + (company.source || 'API') + '</span>';
                 
                 const cnpjLink = company.cnpj 
                     ? `<a href="#" onclick="document.getElementById('cnpjInput').value='${company.cnpj}'; switchTab('cnpj'); searchCNPJ(); return false;" style="color: #667eea;">${formatCNPJ(company.cnpj)}</a>`
@@ -508,18 +341,22 @@ HTML_TEMPLATE = """
                 
                 html += `
                     <div class="result-card" style="margin-bottom: 15px;">
-                        <h3 style="margin-bottom: 10px;">${company.nome_fantasia || company.razao_social} ${sourceBadge}</h3>
-                        ${company.razao_social && company.razao_social !== company.nome_fantasia ? `<div style="color: #666; margin-bottom: 10px;">${company.razao_social}</div>` : ''}
-                        ${cnpjLink ? `<div style="margin-bottom: 10px;">📋 CNPJ: ${cnpjLink}</div>` : ''}
+                        <h3>${company.nome_fantasia || company.razao_social} ${sourceBadge}</h3>
+                        ${cnpjLink ? `<div style="margin: 10px 0;">📋 CNPJ: ${cnpjLink}</div>` : ''}
                         ${company.municipio ? `<div style="color: #666;">📍 ${company.municipio}${company.uf ? '/' + company.uf : ''}</div>` : ''}
-                        ${company.endereco ? `<div style="color: #666;">📍 ${company.endereco}</div>` : ''}
-                        ${company.snippet ? `<div style="color: #666; font-size: 0.9rem; margin-top: 10px; font-style: italic;">${company.snippet}</div>` : ''}
                     </div>
                 `;
             });
             
             result.innerHTML = html;
         }
+        
+        function formatCNPJ(cnpj) {
+            return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+        }
+        
+        document.getElementById('cnpjInput').addEventListener('keypress', e => { if (e.key === 'Enter') searchCNPJ(); });
+        document.getElementById('nameInput').addEventListener('keypress', e => { if (e.key === 'Enter') searchByName(); });
     </script>
 </body>
 </html>
@@ -532,39 +369,28 @@ def index():
 @app.route('/api/cnpj/<cnpj>')
 def get_cnpj(cnpj):
     """Fetch CNPJ data from multiple sources"""
-    # Clean CNPJ (remove non-digits)
     cnpj_clean = ''.join(c for c in cnpj if c.isdigit())
-    
     if len(cnpj_clean) != 14:
         return jsonify({"error": "CNPJ deve ter 14 dígitos"})
     
-    # Initialize combined data
-    combined_data = {
-        "cnpj": cnpj_clean,
-        "sources": [],
-        "enriched": False
-    }
+    combined_data = {"cnpj": cnpj_clean, "sources": [], "enriched": False}
     
-    # Source 1: BrasilAPI (Receita Federal)
+    # Source 1: BrasilAPI
     try:
         url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj_clean}"
         response = requests.get(url, timeout=10)
-        
         if response.status_code == 200:
-            data = response.json()
-            combined_data.update(data)
-            combined_data["sources"].append("receita_federal")
+            combined_data.update(response.json())
+            combined_data["sources"].append("brasilapi")
     except:
         pass
     
-    # Source 2: Minha Receita (alternative)
+    # Source 2: Minha Receita
     try:
         url = f"https://minhareceita.org/{cnpj_clean}"
         response = requests.get(url, timeout=10)
-        
         if response.status_code == 200:
             data = response.json()
-            # Merge data, preferring existing values
             for key, value in data.items():
                 if key not in combined_data or not combined_data[key]:
                     combined_data[key] = value
@@ -572,206 +398,183 @@ def get_cnpj(cnpj):
     except:
         pass
     
-    # Source 3: CNPJ.ws (another alternative)
-    try:
-        url = f"https://publica.cnpj.ws/cnpj/{cnpj_clean}"
-        response = requests.get(url, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            # Extract useful data
-            if "estabelecimento" in data:
-                est = data["estabelecimento"]
-                if "email" in est and not combined_data.get("email"):
-                    combined_data["email"] = est["email"]
-                if "telefone1" in est and not combined_data.get("telefone"):
-                    combined_data["telefone"] = est["telefone1"]
-            combined_data["sources"].append("cnpj_ws")
-    except:
-        pass
-    
-    # Check if we got any data
     if len(combined_data["sources"]) == 0:
-        return jsonify({"error": "CNPJ não encontrado em nenhuma fonte"})
+        return jsonify({"error": "CNPJ não encontrado"})
     
     combined_data["enriched"] = len(combined_data["sources"]) > 1
     return jsonify(combined_data)
 
 @app.route('/api/search')
 def search_companies():
-    """Search companies by name - queries multiple APIs"""
+    """Search companies by name"""
     query = request.args.get('q', '').strip()
-    
     if not query or len(query) < 3:
         return jsonify({"error": "Digite pelo menos 3 caracteres"})
     
     results = []
     sources_used = []
     
-    # Source 1: BrasilAPI - search by name (returns list of CNPJs)
-    try:
-        url = f"https://brasilapi.com.br/api/cnpj/v1/empresas?q={requests.utils.quote(query)}"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            if isinstance(data, list):
-                for item in data[:5]:  # Limit to 5 results
-                    results.append({
-                        "cnpj": item.get("cnpj", ""),
-                        "razao_social": item.get("razao_social", ""),
-                        "nome_fantasia": item.get("nome_fantasia", ""),
-                        "source": "BrasilAPI",
-                        "type": "api"
-                    })
-                sources_used.append("brasilapi")
-    except Exception as e:
-        print(f"BrasilAPI error: {e}")
-        pass
+    # Try name variations
+    search_terms = [query]
+    base_name = re.sub(r'\s+(brasil|brazil|ltda|me|sa)\s*$', '', query, flags=re.IGNORECASE).strip()
+    if base_name and base_name != query:
+        search_terms.append(base_name)
     
-    # Source 2: ReceitaWS - alternative name search API
-    try:
-        url = f"https://www.receitaws.com.br/v1/cnpj/search?q={requests.utils.quote(query)}"
-        headers = {'Accept': 'application/json'}
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("data") and isinstance(data["data"], list):
-                for item in data["data"][:5]:
-                    # Skip if already in results
-                    cnpj_clean = item.get("cnpj", "").replace(".", "").replace("/", "").replace("-", "")
+    for term in search_terms[:2]:
+        # BrasilAPI
+        try:
+            url = f"https://brasilapi.com.br/api/cnpj/v1/empresas?q={requests.utils.quote(term)}"
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    for item in data[:5]:
+                        cnpj = item.get("cnpj", "")
+                        if cnpj and not any(r.get("cnpj") == cnpj for r in results):
+                            results.append({
+                                "cnpj": cnpj,
+                                "razao_social": item.get("razao_social", ""),
+                                "nome_fantasia": item.get("nome_fantasia", ""),
+                                "source": "BrasilAPI"
+                            })
+                    if "brasilapi" not in sources_used:
+                        sources_used.append("brasilapi")
+        except:
+            pass
+        
+        # ReceitaWS
+        try:
+            url = f"https://www.receitaws.com.br/v1/cnpj/search?q={requests.utils.quote(term)}"
+            response = requests.get(url, headers={'Accept': 'application/json'}, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("data"):
+                    for item in data["data"][:5]:
+                        cnpj_clean = item.get("cnpj", "").replace(".", "").replace("/", "").replace("-", "")
+                        if cnpj_clean and not any(r.get("cnpj") == cnpj_clean for r in results):
+                            results.append({
+                                "cnpj": cnpj_clean,
+                                "razao_social": item.get("nome", ""),
+                                "nome_fantasia": item.get("fantasia", ""),
+                                "municipio": item.get("municipio", ""),
+                                "uf": item.get("uf", ""),
+                                "source": "ReceitaWS"
+                            })
+                    if "receitaws" not in sources_used:
+                        sources_used.append("receitaws")
+        except:
+            pass
+    
+    # Google scraping as fallback
+    if len(results) == 0:
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            url = f"https://www.google.com/search?q={requests.utils.quote(query + ' empresa CNPJ')}"
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                cnpj_pattern = r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}'
+                found_cnpjs = re.findall(cnpj_pattern, response.text)
+                for cnpj in found_cnpjs[:3]:
+                    cnpj_clean = cnpj.replace('.', '').replace('/', '').replace('-', '')
                     if not any(r.get("cnpj") == cnpj_clean for r in results):
                         results.append({
+                            "nome_fantasia": f"Empresa encontrada",
+                            "razao_social": query,
                             "cnpj": cnpj_clean,
-                            "razao_social": item.get("nome", ""),
-                            "nome_fantasia": item.get("fantasia", ""),
-                            "municipio": item.get("municipio", ""),
-                            "uf": item.get("uf", ""),
-                            "source": "ReceitaWS",
-                            "type": "api"
+                            "source": "Google Search"
                         })
-                if "receitaws" not in sources_used:
-                    sources_used.append("receitaws")
-    except Exception as e:
-        print(f"ReceitaWS error: {e}")
-        pass
+                if found_cnpjs and "google" not in sources_used:
+                    sources_used.append("google")
+        except:
+            pass
     
-    # Source 3: CNPJ.io - another search API
-    try:
-        url = f"https://api.cnpj.io/v1/companies?q={requests.utils.quote(query)}"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            if isinstance(data, list):
-                for item in data[:3]:
-                    cnpj_clean = str(item.get("cnpj", "")).replace(".", "").replace("/", "").replace("-", "")
-                    if cnpj_clean and not any(r.get("cnpj") == cnpj_clean for r in results):
-                        results.append({
-                            "cnpj": cnpj_clean,
-                            "razao_social": item.get("razao_social", ""),
-                            "nome_fantasia": item.get("nome_fantasia", ""),
-                            "source": "CNPJ.io",
-                            "type": "api"
-                        })
-                if "cnpj_io" not in sources_used:
-                    sources_used.append("cnpj_io")
-    except Exception as e:
-        print(f"CNPJ.io error: {e}")
-        pass
-    
-    # Source 2: Try to get details for found CNPJs from other sources
-    enriched_results = []
-    for company in results:
-        if company.get("cnpj"):
-            try:
-                # Try Minha Receita for more details
-                url = f"https://minhareceita.org/{company['cnpj']}"
-                response = requests.get(url, timeout=5)
-                if response.status_code == 200:
-                    data = response.json()
-                    company["municipio"] = data.get("municipio", "")
-                    company["uf"] = data.get("uf", "")
-                    company["situacao"] = data.get("situacao", "")
-            except:
-                pass
-        enriched_results.append(company)
-    
-    # Source 4: Web Scraping - Google Search (improved)
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
-        }
-        search_query = f"{query} empresa CNPJ site:linkedin.com OR site:facebook.com OR site:instagram.com"
-        search_url = f"https://www.google.com/search?q={requests.utils.quote(search_query)}&num=10"
-        response = requests.get(search_url, headers=headers, timeout=15)
-        
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
+    # Yahoo search scraping as another fallback
+    if len(results) == 0:
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+            }
+            # Yahoo search URL
+            yahoo_url = f"https://search.yahoo.com/search?p={requests.utils.quote(query + ' empresa CNPJ Brazil')}"
+            response = requests.get(yahoo_url, headers=headers, timeout=15)
             
-            # Try multiple selectors for search results
-            result_selectors = [
-                'div.g',  # Classic Google result
-                'div[data-ved]',  # Newer Google layout
-                '.yuRUbf',  # Another Google class
-                'h3',  # Just get all headings
-            ]
-            
-            found_results = []
-            for selector in result_selectors:
-                found_results = soup.select(selector)
-                if found_results:
-                    break
-            
-            # Extract CNPJ pattern
-            cnpj_pattern = r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}'
-            page_text = soup.get_text()
-            found_cnpjs = re.findall(cnpj_pattern, page_text)
-            
-            # Process results
-            for elem in found_results[:5]:
-                title = elem.get_text().strip() if elem else ''
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
                 
-                # Clean up title (remove common suffixes)
-                title = re.sub(r'\s*[-|]\s*(LinkedIn|Facebook|Instagram|Google).*$', '', title, flags=re.IGNORECASE)
+                # Look for CNPJ patterns
+                cnpj_pattern = r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}'
+                found_cnpjs = re.findall(cnpj_pattern, response.text)
                 
-                if len(title) > 5 and not any(r.get('nome_fantasia') == title or r.get('razao_social') == title for r in enriched_results):
-                    # Try to find CNPJ near this result
-                    cnpj = ''
-                    if found_cnpjs:
-                        cnpj = found_cnpjs.pop(0).replace('.', '').replace('/', '').replace('-', '')
+                # Also look for company names in results
+                # Yahoo uses different selectors
+                yahoo_results = soup.find_all('div', class_='algo') or soup.find_all('li', class_='ov-a') or soup.find_all('h3')
+                
+                for elem in yahoo_results[:5]:
+                    title = elem.get_text().strip() if elem else ''
+                    # Clean up title
+                    title = re.sub(r'\s*[-|]\s*(Yahoo|Search|Results).*$', '', title, flags=re.IGNORECASE)
                     
-                    enriched_results.append({
-                        "nome_fantasia": title[:100],
-                        "razao_social": title[:100],
-                        "cnpj": cnpj,
-                        "source": "Google Search",
-                        "type": "scraping"
-                    })
-            
-            if enriched_results and len([r for r in enriched_results if r.get('source') == 'Google Search']) > 0:
-                if "google_scraping" not in sources_used:
-                    sources_used.append("google_scraping")
-    except Exception as e:
-        print(f"Scraping error: {e}")
-        pass
+                    if len(title) > 5 and not any(r.get('nome_fantasia') == title or r.get('razao_social') == title for r in results):
+                        # Try to find a CNPJ for this result
+                        cnpj = ''
+                        if found_cnpjs:
+                            cnpj = found_cnpjs.pop(0).replace('.', '').replace('/', '').replace('-', '')
+                        
+                        results.append({
+                            "nome_fantasia": title[:100],
+                            "razao_social": title[:100],
+                            "cnpj": cnpj,
+                            "source": "Yahoo Search",
+                            "type": "scraping"
+                        })
+                
+                if results and any(r.get('source') == 'Yahoo Search' for r in results):
+                    if "yahoo" not in sources_used:
+                        sources_used.append("yahoo")
+        except Exception as e:
+            print(f"Yahoo search error: {e}")
+            pass
     
-    # Source 4: Web Scraping - LinkedIn (public pages)
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        linkedin_url = f"https://www.linkedin.com/company/{query.lower().replace(' ', '-')}"
-        # Note: LinkedIn blocks most scraping, this is a placeholder for future implementation
-        # Would need proper scraping tools or LinkedIn API
-    except:
-        pass
+    # Bing search scraping as yet another fallback
+    if len(results) == 0:
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+            bing_url = f"https://www.bing.com/search?q={requests.utils.quote(query + ' empresa CNPJ')}"
+            response = requests.get(bing_url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                cnpj_pattern = r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}'
+                found_cnpjs = re.findall(cnpj_pattern, response.text)
+                
+                for cnpj in found_cnpjs[:2]:
+                    cnpj_clean = cnpj.replace('.', '').replace('/', '').replace('-', '')
+                    if not any(r.get("cnpj") == cnpj_clean for r in results):
+                        results.append({
+                            "nome_fantasia": f"Empresa encontrada (Bing)",
+                            "razao_social": query,
+                            "cnpj": cnpj_clean,
+                            "source": "Bing Search"
+                        })
+                
+                if found_cnpjs and "bing" not in sources_used:
+                    sources_used.append("bing")
+        except:
+            pass
     
     return jsonify({
         "query": query,
-        "count": len(enriched_results),
+        "count": len(results),
         "sources": sources_used,
-        "results": enriched_results
+        "results": results
     })
 
 if __name__ == '__main__':
